@@ -191,6 +191,7 @@ pub fn decay_creatures(
             acc += costs.feed_cost;
         }
         cd.energy -= acc;
+        cd.age += 1;
     })
 }
 
