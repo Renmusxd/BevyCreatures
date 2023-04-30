@@ -38,7 +38,7 @@ impl NeuralBrain {
         }
     }
 
-    fn clone_mutate(&self, std: f32) -> Self {
+    pub(crate) fn clone_mutate(&self, std: f32) -> Self {
         let d = Normal::new(0., std).unwrap();
         let mats = self
             .mats

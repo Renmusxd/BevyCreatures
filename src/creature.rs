@@ -1,10 +1,13 @@
 use crate::brain::NeuralBrain;
 use crate::utils::Grid;
-use crate::world::{FoodEnergy, ViewColor};
+use crate::world::{FoodCount, FoodEnergy, MaxFood, ViewColor};
 use bevy::math::{vec2, vec3, Vec3Swizzles};
 use bevy::prelude::*;
 use num::pow::Pow;
 use num::Float;
+use rand::prelude::*;
+use rand_distr::Normal;
+use std::cmp::min;
 use std::cmp::Ordering::Equal;
 
 #[derive(Bundle)]
@@ -18,6 +21,53 @@ pub struct Creature {
     pub(crate) dets: CreatureDetails,
     pub(crate) target_food: TargetFood,
     pub(crate) target_creature: TargetCreature,
+}
+
+impl Creature {
+    pub(crate) fn new(
+        inputs: usize,
+        outputs: usize,
+        energy: f32,
+        color: Color,
+        r: Vec2,
+        theta: f32,
+        texture: Handle<Image>,
+    ) -> Self {
+        let brain = NeuralBrain::new_random(inputs, outputs, &[8]);
+        Creature::new_with_brain(brain, energy, color, r, theta, texture)
+    }
+
+    fn new_with_brain(
+        brain: NeuralBrain,
+        energy: f32,
+        color: Color,
+        r: Vec2,
+        theta: f32,
+        texture: Handle<Image>,
+    ) -> Self {
+        Creature {
+            brain,
+            vperception: Default::default(),
+            sperception: Default::default(),
+            actions: Default::default(),
+            view_color: ViewColor {
+                color: color.clone(),
+            },
+            sprite: SpriteBundle {
+                texture,
+                sprite: Sprite { color, ..default() },
+                transform: Transform {
+                    translation: Vec3::new(r.x, r.y, 0.),
+                    scale: Vec3::from([0.25, 0.25, 1.0]),
+                    rotation: Quat::from_rotation_z(theta),
+                },
+                ..default()
+            },
+            dets: CreatureDetails { energy, age: 0 },
+            target_food: Default::default(),
+            target_creature: Default::default(),
+        }
+    }
 }
 
 #[derive(Component)]
@@ -139,20 +189,28 @@ pub struct CreaturePreferences {
     pub(crate) turn_speed: f32,
     pub(crate) num_memories: usize,
     pub(crate) mouth_radius: f32,
+    pub(crate) food_ratio: f32,
+    pub(crate) max_food_per_feed: usize,
+    pub(crate) split_std: f32,
+    pub(crate) mutation_rate: f32,
     pub(crate) energy_costs: EnergyCosts,
 }
 impl Default for CreaturePreferences {
     fn default() -> Self {
         CreaturePreferences {
-            max_view_dist: 300.0,
-            vision_range: std::f32::consts::PI / 8.0,
-            vision_slices: 7,
-            energy_scale: 10_000.,
+            max_view_dist: 300.,
+            vision_range: std::f32::consts::PI / 8.,
+            vision_slices: 5,
+            energy_scale: 50_000.,
             max_age: 1000_000,
-            walk_speed: 0.1,
+            walk_speed: 0.3,
             turn_speed: 0.01,
-            num_memories: 5,
+            num_memories: 1,
             mouth_radius: 20.,
+            food_ratio: 10.,
+            max_food_per_feed: 100,
+            split_std: 20.0,
+            mutation_rate: 0.1,
             energy_costs: Default::default(),
         }
     }
@@ -163,55 +221,26 @@ pub struct EnergyCosts {
     motor_cost_scale: f32,
     bite_cost: f32,
     feed_cost: f32,
+    split_cost: f32,
+    split_overhead: f32,
 }
 impl Default for EnergyCosts {
     fn default() -> Self {
         EnergyCosts {
-            base_cost: 1.0,
-            motor_cost_scale: 10.0,
-            bite_cost: 10.0,
-            feed_cost: 10.0,
-        }
-    }
-}
-
-// Remove energy based on actions.
-pub fn decay_creatures(
-    mut query: Query<(&mut CreatureDetails, &Actions)>,
-    creature_preferences: Res<CreaturePreferences>,
-) {
-    let costs = &creature_preferences.energy_costs;
-    query.par_iter_mut().for_each_mut(|(mut cd, acts)| {
-        let mut acc = costs.base_cost;
-        acc += costs.motor_cost_scale * (acts.left_motor.pow(2) + acts.right_motor.pow(2));
-        if acts.bite {
-            acc += costs.bite_cost;
-        }
-        if acts.feed {
-            acc += costs.feed_cost;
-        }
-        cd.energy -= acc;
-        cd.age += 1;
-    })
-}
-
-// Remove creatures with zero energy.
-pub fn creature_despawn(
-    query: Query<(Entity, &CreatureDetails)>,
-    mut commands: Commands,
-    creature_preferences: Res<CreaturePreferences>,
-) {
-    for (entity, cd) in query.iter() {
-        if cd.energy <= 0. || cd.age >= creature_preferences.max_age {
-            commands.entity(entity).despawn();
+            base_cost: 0.1,
+            motor_cost_scale: 1.,
+            bite_cost: 10.,
+            feed_cost: 10.,
+            split_cost: 10.,
+            split_overhead: 25_000.,
         }
     }
 }
 
 #[derive(Resource)]
 pub struct CollisionGrid {
-    foodgrid: Grid<Entity>,
-    creaturegrid: Grid<Entity>,
+    pub foodgrid: Grid<Entity>,
+    pub creaturegrid: Grid<Entity>,
 }
 
 impl CollisionGrid {
@@ -280,9 +309,9 @@ pub fn vision_perception(
                         let count_zeroed = (zeroed_dtheta / dangle).floor() as usize;
                         let d = (tv - v).length();
                         if d < perc.d()[count_zeroed] {
-                            perc.r_mut()[count_zeroed] = c.r;
-                            perc.g_mut()[count_zeroed] = c.g;
-                            perc.b_mut()[count_zeroed] = c.b;
+                            perc.r_mut()[count_zeroed] = c.color.r();
+                            perc.g_mut()[count_zeroed] = c.color.g();
+                            perc.b_mut()[count_zeroed] = c.color.b();
                             perc.d_mut()[count_zeroed] = d;
                         }
                     }
@@ -357,14 +386,6 @@ pub fn move_from_actions(
     });
 }
 
-pub fn creatures_split(actors: Query<&Actions>) {
-    todo!()
-}
-
-pub fn creatures_bite(actors: Query<&Actions>, grids: Res<CollisionGrid>) {
-    todo!()
-}
-
 pub fn find_closest_food(
     mut actors: Query<(&Actions, &Transform, &mut TargetFood)>,
     grids: Res<CollisionGrid>,
@@ -433,17 +454,148 @@ pub fn find_closest_creature(
         })
 }
 
+pub fn creatures_split(
+    mut commands: Commands,
+    mut actors: Query<(
+        &Actions,
+        &Sprite,
+        &NeuralBrain,
+        &Transform,
+        &mut CreatureDetails,
+    )>,
+    creature_prefs: Res<CreaturePreferences>,
+    asset_server: Res<AssetServer>,
+    mut count: ResMut<CreatureCount>,
+) {
+    let mut rng = thread_rng();
+    let normal = Normal::new(0.0, creature_prefs.split_std).unwrap();
+    actors.for_each_mut(|(acts, sprite, brain, transform, mut dets)| {
+        if acts.split {
+            if dets.energy > creature_prefs.energy_costs.split_overhead {
+                dets.energy -= creature_prefs.energy_costs.split_overhead;
+                let half_energy = dets.energy / 2.0;
+                dets.energy = half_energy;
+
+                let x = normal.sample(&mut rng);
+                let y = normal.sample(&mut rng);
+                let theta = 2. * rng.gen::<f32>() * std::f32::consts::PI;
+                let r = transform.translation.xy() + vec2(x, y);
+
+                let new_brain = brain.clone_mutate(creature_prefs.mutation_rate);
+                let new_creature = Creature::new_with_brain(
+                    new_brain,
+                    half_energy,
+                    sprite.color,
+                    r,
+                    theta,
+                    asset_server.load("imgs/animal.png"),
+                );
+                commands.spawn(new_creature);
+                count.count += 1;
+            }
+        }
+    })
+}
+
+pub fn creatures_bite(
+    mut actors: Query<(&Actions, &Transform, &mut CreatureDetails, &TargetCreature)>,
+    creature_prefs: Res<CreaturePreferences>,
+) {
+    todo!()
+}
+
 pub fn creatures_eat(
     mut actors: Query<(&Actions, &Transform, &mut CreatureDetails, &TargetFood)>,
     mut food: Query<&mut FoodEnergy>,
     creature_prefs: Res<CreaturePreferences>,
+    mut foodcount: ResMut<FoodCount>,
 ) {
     actors.for_each_mut(|(acts, t, mut dets, target)| {
-        let food = target.target.and_then(|e| food.get(e).ok());
-        if let Some(food) = food {
-            todo!()
+        let food = target.target.and_then(|e| food.get_mut(e).ok());
+        if let Some(mut food) = food {
+            let to_eat = min(food.energy, creature_prefs.max_food_per_feed);
+            food.energy -= to_eat;
+            foodcount.total_energy -= to_eat;
+            dets.energy += creature_prefs.food_ratio * (to_eat as f32);
         }
     })
+}
+
+#[derive(Resource)]
+pub struct CreatureCount {
+    pub count: usize,
+    pub min_count: usize,
+}
+
+pub fn repopulate_creatures(
+    mut commands: Commands,
+    creature_preferences: Res<CreaturePreferences>,
+    maxfood: Res<MaxFood>,
+    mut count: ResMut<CreatureCount>,
+    asset_server: Res<AssetServer>,
+) {
+    if count.count < count.min_count {
+        let mut rng = thread_rng();
+        let normal = Normal::new(0.0, maxfood.food_std).unwrap();
+        let x = normal.sample(&mut rng);
+        let y = normal.sample(&mut rng);
+        let theta = 2. * std::f32::consts::PI * rng.gen::<f32>();
+
+        let num_vision_inputs =
+            VisionPerception::num_channels_per_angle() * creature_preferences.vision_slices;
+        let num_self_inputs =
+            SelfPerception::num_non_memory_perceptions() + creature_preferences.num_memories;
+        let num_actions = Actions::num_non_memory_actions() + creature_preferences.num_memories;
+        let color = Color::rgb(1.0, 0.0, 0.0);
+        commands.spawn(Creature::new(
+            num_vision_inputs + num_self_inputs,
+            num_actions,
+            20_000.,
+            color,
+            vec2(x, y),
+            theta,
+            asset_server.load("imgs/animal.png"),
+        ));
+        count.count += 1;
+    }
+}
+
+// Remove energy based on actions.
+pub fn decay_creatures(
+    mut query: Query<(&mut CreatureDetails, &Actions)>,
+    creature_preferences: Res<CreaturePreferences>,
+) {
+    let costs = &creature_preferences.energy_costs;
+    query.par_iter_mut().for_each_mut(|(mut cd, acts)| {
+        let mut acc = costs.base_cost;
+        acc += costs.motor_cost_scale * (acts.left_motor.pow(2) + acts.right_motor.pow(2));
+        if acts.bite {
+            acc += costs.bite_cost;
+        }
+        if acts.feed {
+            acc += costs.feed_cost;
+        }
+        if acts.split {
+            acc += costs.split_cost;
+        }
+        cd.energy -= acc;
+        cd.age += 1;
+    })
+}
+
+// Remove creatures with zero energy.
+pub fn creature_despawn(
+    mut commands: Commands,
+    query: Query<(Entity, &CreatureDetails)>,
+    creature_preferences: Res<CreaturePreferences>,
+    mut count: ResMut<CreatureCount>,
+) {
+    for (entity, cd) in query.iter() {
+        if cd.energy <= 0. || cd.age >= creature_preferences.max_age {
+            commands.entity(entity).despawn();
+            count.count -= 1;
+        }
+    }
 }
 
 #[inline]

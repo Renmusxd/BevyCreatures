@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use rand::prelude::*;
 use rand_distr::{Distribution, Normal};
+use std::cmp::min;
 
 #[derive(Default, Resource)]
 pub struct FoodCount {
@@ -16,7 +17,7 @@ pub struct MaxFood {
 
 #[derive(Component)]
 pub struct FoodEnergy {
-    energy: usize,
+    pub energy: usize,
 }
 
 #[derive(Bundle)]
@@ -29,9 +30,7 @@ pub struct Food {
 
 #[derive(Component)]
 pub struct ViewColor {
-    pub(crate) r: f32,
-    pub(crate) g: f32,
-    pub(crate) b: f32,
+    pub color: Color,
 }
 
 pub fn populate_food(
@@ -51,9 +50,7 @@ pub fn populate_food(
         let food = Food {
             energy: FoodEnergy { energy },
             view_color: ViewColor {
-                r: 0.0,
-                g: 1.0,
-                b: 0.0,
+                color: Color::GREEN,
             },
             sprite: SpriteBundle {
                 texture: asset_server.load("imgs/food.png"),
@@ -72,8 +69,9 @@ pub fn populate_food(
 
 pub fn decay_food(mut query: Query<&mut FoodEnergy>, mut foodcount: ResMut<FoodCount>) {
     query.iter_mut().for_each(|mut fe| {
-        fe.energy -= 1;
-        foodcount.total_energy -= 1;
+        let dec = min(fe.energy, 1);
+        fe.energy -= dec;
+        foodcount.total_energy -= dec;
     })
 }
 

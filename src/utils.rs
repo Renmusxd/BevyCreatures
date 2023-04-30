@@ -81,18 +81,25 @@ impl<T> Grid<T> {
         let iy = (y - self.miny) / self.dy;
         let dnx = (d / self.dx).floor() as usize;
         let dny = (d / self.dy).floor() as usize;
+        let outside_bounds = ix < 0. || ix >= (self.nx as f32) || iy < 0. || iy >= (self.ny as f32);
 
-        let within_bounds = if ix < 0. || ix > (self.nx as f32) || iy < 0. || iy > (self.ny as f32)
-        {
+        let within_bounds = if !outside_bounds {
             let ix = ix as usize;
             let iy = iy as usize;
-            let lowx = ix - min(ix, dnx);
-            let lowy = iy - min(iy, dny);
-            let highx = max(ix + dnx, self.nx);
-            let highy = max(iy + dny, self.ny);
+            debug_assert!(ix < self.nx);
+            debug_assert!(iy < self.ny);
+            let lowx = ix - min(ix, dnx + 1);
+            let lowy = iy - min(iy, dny + 1);
+            let highx = min(ix + dnx + 1, self.nx);
+            let highy = min(iy + dny + 1, self.ny);
             let within_bounds = (lowx..highx)
                 .flat_map(move |dix| (lowy..highy).map(move |diy| (dix, diy)))
-                .flat_map(move |(dix, diy)| self.dat[diy * self.nx + dix].iter());
+                .flat_map(move |(dix, diy)| {
+                    debug_assert!(dix < self.nx, "dix={} >= {}", dix, self.nx);
+                    debug_assert!(diy < self.ny, "diy={} >= {}", diy, self.ny);
+
+                    self.dat[(diy * self.nx) + dix].iter()
+                });
             IterEither::A(within_bounds)
         } else {
             let all_possible = self.dat.iter().flat_map(|v| v.iter());
