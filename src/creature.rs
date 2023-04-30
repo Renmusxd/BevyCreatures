@@ -20,7 +20,7 @@ pub struct Creature {
     pub(crate) view_color: ViewColor,
     pub(crate) dets: CreatureDetails,
     pub(crate) target_food: TargetFood,
-    pub(crate) target_creature: TargetCreature,
+    pub(crate) target_creature: CreatureTarget,
 }
 
 impl Creature {
@@ -81,8 +81,9 @@ pub struct TargetFood {
     pub(crate) target: Option<Entity>,
 }
 #[derive(Component, Default)]
-pub struct TargetCreature {
+pub struct CreatureTarget {
     pub(crate) target: Option<Entity>,
+    drained: f32,
 }
 
 #[derive(Component, Default)]
@@ -191,6 +192,7 @@ pub struct CreaturePreferences {
     pub(crate) mouth_radius: f32,
     pub(crate) food_ratio: f32,
     pub(crate) max_food_per_feed: usize,
+    pub(crate) energy_drain_per_bite: f32,
     pub(crate) split_std: f32,
     pub(crate) mutation_rate: f32,
     pub(crate) energy_costs: EnergyCosts,
@@ -207,8 +209,9 @@ impl Default for CreaturePreferences {
             turn_speed: 0.01,
             num_memories: 1,
             mouth_radius: 20.,
-            food_ratio: 10.,
+            food_ratio: 50.,
             max_food_per_feed: 100,
+            energy_drain_per_bite: 1000.0,
             split_std: 20.0,
             mutation_rate: 0.1,
             energy_costs: Default::default(),
@@ -316,6 +319,10 @@ pub fn vision_perception(
                         }
                     }
                 });
+            // Now go through and flip the distance vectors to be 0-1
+            perc.d_mut().iter_mut().for_each(|x| {
+                *x = 1. - (*x / creature_prefs.vision_range);
+            });
         });
 }
 
@@ -421,7 +428,7 @@ pub fn find_closest_food(
 }
 
 pub fn find_closest_creature(
-    mut actors: Query<(&Actions, &Transform, &mut TargetCreature)>,
+    mut actors: Query<(&Actions, &Transform, &mut CreatureTarget)>,
     grids: Res<CollisionGrid>,
     creature_prefs: Res<CreaturePreferences>,
 ) {
@@ -498,10 +505,27 @@ pub fn creatures_split(
 }
 
 pub fn creatures_bite(
-    mut actors: Query<(&Actions, &Transform, &mut CreatureDetails, &TargetCreature)>,
+    mut actors: Query<(&Actions, &Transform, &mut CreatureTarget)>,
+    mut actees: Query<&mut CreatureDetails>,
     creature_prefs: Res<CreaturePreferences>,
 ) {
-    todo!()
+    actors.for_each_mut(|(act, t, mut creature_target)| {
+        if act.bite {
+            if let Some(creature) = creature_target.target {
+                let mut actee_dets = actees.get_mut(creature).expect("Target Missing");
+                let to_drain = actee_dets.energy.min(creature_prefs.energy_drain_per_bite);
+                actee_dets.energy -= to_drain;
+                creature_target.drained = to_drain;
+            }
+        }
+    })
+}
+
+pub fn eat_drained(mut actees: Query<(&mut CreatureDetails, &mut CreatureTarget)>) {
+    actees.par_iter_mut().for_each_mut(|(mut det, mut tar)| {
+        det.energy += tar.drained;
+        tar.drained = 0.0;
+    })
 }
 
 pub fn creatures_eat(

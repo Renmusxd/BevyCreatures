@@ -18,7 +18,7 @@ impl NeuralBrain {
         let mut max_size = input;
         let mut last_size = input;
         let mut mats = vec![];
-        let d = Normal::new(0., 1.).unwrap();
+        let d = Normal::new(0., 0.1).unwrap();
         shape.iter().cloned().for_each(|next_size| {
             let mat = Array::random([next_size, last_size], d);
             mats.push(mat);

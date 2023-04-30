@@ -68,11 +68,11 @@ pub fn populate_food(
 }
 
 pub fn decay_food(mut query: Query<&mut FoodEnergy>, mut foodcount: ResMut<FoodCount>) {
-    query.iter_mut().for_each(|mut fe| {
-        let dec = min(fe.energy, 1);
-        fe.energy -= dec;
-        foodcount.total_energy -= dec;
-    })
+    // query.iter_mut().for_each(|mut fe| {
+    //     let dec = min(fe.energy, 1);
+    //     fe.energy -= dec;
+    //     foodcount.total_energy -= dec;
+    // })
 }
 
 pub fn food_despawn(query: Query<(Entity, &FoodEnergy)>, mut commands: Commands) {

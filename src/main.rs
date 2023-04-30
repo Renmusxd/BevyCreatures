@@ -13,7 +13,7 @@ use bevy_prototype_debug_lines::*;
 use num::traits::Pow;
 use std::cmp::Ordering::Equal;
 
-const TIME_STEP: f32 = 1.0 / 120.0;
+const TIME_STEP: f32 = 1.0 / 60.0;
 const BACKGROUND_COLOR: Color = Color::rgb(0.0, 0.0, 0.0);
 
 fn main() {
@@ -38,7 +38,9 @@ fn main() {
         find_closest_food.after(think_of_actions),
         find_closest_creature.after(think_of_actions),
         creatures_eat.after(find_closest_food),
-        creatures_split.after(creatures_eat),
+        creatures_bite.after(find_closest_creature),
+        eat_drained.after(creatures_bite),
+        creatures_split.after(creatures_eat).after(eat_drained),
     );
 
     App::new()
@@ -50,14 +52,14 @@ fn main() {
         .insert_resource(ClearColor(BACKGROUND_COLOR))
         .insert_resource(FixedTime::new_from_secs(TIME_STEP))
         .insert_resource(MaxFood {
-            total_energy: 600_000,
+            total_energy: 1_000_000,
             min_food_grow: 600,
             max_food_grow: 6000,
             food_std: 600.0,
         })
         .insert_resource(CreatureCount {
             count: 0,
-            min_count: 20,
+            min_count: 50,
         })
         .insert_resource(Game::default())
         .insert_resource(CreaturePreferences::default())
@@ -91,7 +93,7 @@ fn setup(mut commands: Commands) {
 }
 
 fn draw_vision_lines(
-    query: Query<(&VisionPerception, &Transform, &TargetFood, &TargetCreature)>,
+    query: Query<(&VisionPerception, &Transform, &TargetFood, &CreatureTarget)>,
     foods: Query<&Transform, With<FoodEnergy>>,
     creatures: Query<&Transform, With<CreatureDetails>>,
     mut lines: ResMut<DebugLines>,
@@ -112,8 +114,9 @@ fn draw_vision_lines(
         (0..perc.n())
             .filter(|i| perc.d()[*i].is_finite())
             .for_each(|i| {
+                let distance = (1. - perc.d()[i]) * creature_prefs.vision_range;
                 let color = Color::rgb(perc.r()[i], perc.g()[i], perc.b()[i]);
-                let v = vec3(perc.d()[i], 0.0, 0.0);
+                let v = vec3(distance, 0.0, 0.0);
                 let r = Quat::from_rotation_z(
                     dangle * (i as f32) - creature_prefs.vision_range + dangle / 2.0,
                 );
