@@ -3,10 +3,10 @@ mod creature;
 mod utils;
 mod world;
 
-use crate::brain::NeuralBrain;
+
 use crate::creature::*;
 use crate::world::*;
-use bevy::math::{vec2, vec3};
+use bevy::math::{vec3};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_prototype_debug_lines::*;

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use ndarray::{arr1, Array, Array1, Dim};
+use ndarray::{Array, Array1, Dim};
 use ndarray_rand::rand_distr::Normal;
 use ndarray_rand::RandomExt;
 use std::cmp::max;

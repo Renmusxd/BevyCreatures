@@ -51,7 +51,7 @@ impl Creature {
             sperception: Default::default(),
             actions: Default::default(),
             view_color: ViewColor {
-                color: color.clone(),
+                color,
             },
             sprite: SpriteBundle {
                 texture,
@@ -204,7 +204,7 @@ impl Default for CreaturePreferences {
             vision_range: std::f32::consts::PI / 8.,
             vision_slices: 5,
             energy_scale: 50_000.,
-            max_age: 1000_000,
+            max_age: 1_000_000,
             walk_speed: 0.3,
             turn_speed: 0.01,
             num_memories: 1,
@@ -334,7 +334,7 @@ pub fn self_perception(
     perceivee
         .par_iter_mut()
         .for_each_mut(|(mut perc, dets, acts)| {
-            perc.energy = (dets.energy as f32) / (creature_prefs.energy_scale as f32);
+            perc.energy = dets.energy / creature_prefs.energy_scale;
             perc.age = (dets.age as f32) / (creature_prefs.max_age as f32);
             perc.memory.clear();
             perc.memory.extend_from_slice(&acts.memory);
@@ -477,29 +477,27 @@ pub fn creatures_split(
     let mut rng = thread_rng();
     let normal = Normal::new(0.0, creature_prefs.split_std).unwrap();
     actors.for_each_mut(|(acts, sprite, brain, transform, mut dets)| {
-        if acts.split {
-            if dets.energy > creature_prefs.energy_costs.split_overhead {
-                dets.energy -= creature_prefs.energy_costs.split_overhead;
-                let half_energy = dets.energy / 2.0;
-                dets.energy = half_energy;
+        if acts.split && dets.energy > creature_prefs.energy_costs.split_overhead {
+            dets.energy -= creature_prefs.energy_costs.split_overhead;
+            let half_energy = dets.energy / 2.0;
+            dets.energy = half_energy;
 
-                let x = normal.sample(&mut rng);
-                let y = normal.sample(&mut rng);
-                let theta = 2. * rng.gen::<f32>() * std::f32::consts::PI;
-                let r = transform.translation.xy() + vec2(x, y);
+            let x = normal.sample(&mut rng);
+            let y = normal.sample(&mut rng);
+            let theta = 2. * rng.gen::<f32>() * std::f32::consts::PI;
+            let r = transform.translation.xy() + vec2(x, y);
 
-                let new_brain = brain.clone_mutate(creature_prefs.mutation_rate);
-                let new_creature = Creature::new_with_brain(
-                    new_brain,
-                    half_energy,
-                    sprite.color,
-                    r,
-                    theta,
-                    asset_server.load("imgs/animal.png"),
-                );
-                commands.spawn(new_creature);
-                count.count += 1;
-            }
+            let new_brain = brain.clone_mutate(creature_prefs.mutation_rate);
+            let new_creature = Creature::new_with_brain(
+                new_brain,
+                half_energy,
+                sprite.color,
+                r,
+                theta,
+                asset_server.load("imgs/animal.png"),
+            );
+            commands.spawn(new_creature);
+            count.count += 1;
         }
     })
 }
@@ -509,7 +507,7 @@ pub fn creatures_bite(
     mut actees: Query<&mut CreatureDetails>,
     creature_prefs: Res<CreaturePreferences>,
 ) {
-    actors.for_each_mut(|(act, t, mut creature_target)| {
+    actors.for_each_mut(|(act, _t, mut creature_target)| {
         if act.bite {
             if let Some(creature) = creature_target.target {
                 let mut actee_dets = actees.get_mut(creature).expect("Target Missing");
@@ -534,7 +532,7 @@ pub fn creatures_eat(
     creature_prefs: Res<CreaturePreferences>,
     mut foodcount: ResMut<FoodCount>,
 ) {
-    actors.for_each_mut(|(acts, t, mut dets, target)| {
+    actors.for_each_mut(|(_acts, _t, mut dets, target)| {
         let food = target.target.and_then(|e| food.get_mut(e).ok());
         if let Some(mut food) = food {
             let to_eat = min(food.energy, creature_prefs.max_food_per_feed);

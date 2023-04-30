@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rand::prelude::*;
 use rand_distr::{Distribution, Normal};
-use std::cmp::min;
+
 
 #[derive(Default, Resource)]
 pub struct FoodCount {
@@ -67,7 +67,7 @@ pub fn populate_food(
     }
 }
 
-pub fn decay_food(mut query: Query<&mut FoodEnergy>, mut foodcount: ResMut<FoodCount>) {
+pub fn decay_food(_query: Query<&mut FoodEnergy>, _foodcount: ResMut<FoodCount>) {
     // query.iter_mut().for_each(|mut fe| {
     //     let dec = min(fe.energy, 1);
     //     fe.energy -= dec;

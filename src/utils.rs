@@ -1,5 +1,5 @@
 use num::pow::Pow;
-use std::cmp::{max, min};
+use std::cmp::{min};
 
 pub enum IterEither<TA, TB> {
     A(TA),
