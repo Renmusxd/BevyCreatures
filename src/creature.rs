@@ -224,7 +224,7 @@ impl Default for CreaturePreferences {
             max_age: 100_000,
             walk_speed: 0.3,
             turn_speed: 0.01,
-            num_memories: 1,
+            num_memories: 3,
             mouth_radius: 20.,
             food_ratio: 50.,
             max_food_per_feed: 100,
@@ -397,6 +397,12 @@ pub fn think_of_actions(
         });
 }
 
+pub fn reset_attack(mut perceivee: Query<&mut SelfPerception>) {
+    perceivee
+        .par_iter_mut()
+        .for_each_mut(|mut p| p.being_attacked = false);
+}
+
 pub fn move_from_actions(
     mut actors: Query<(&Actions, &mut Transform)>,
     creature_prefs: Res<CreaturePreferences>,
@@ -534,16 +540,18 @@ pub fn creatures_split(
 
 pub fn creatures_bite(
     mut actors: Query<(&Actions, &Transform, &mut CreatureTarget)>,
-    mut actees: Query<&mut CreatureDetails>,
+    mut actees: Query<(&mut CreatureDetails, &mut SelfPerception)>,
     creature_prefs: Res<CreaturePreferences>,
 ) {
     actors.for_each_mut(|(act, _t, mut creature_target)| {
         if act.bite {
             if let Some(creature) = creature_target.target {
-                let mut actee_dets = actees.get_mut(creature).expect("Target Missing");
+                let (mut actee_dets, mut actee_perc) =
+                    actees.get_mut(creature).expect("Target Missing");
                 let to_drain = actee_dets.energy.min(creature_prefs.energy_drain_per_bite);
                 actee_dets.energy -= to_drain;
                 creature_target.drained = to_drain;
+                actee_perc.being_attacked = true;
             }
         }
     })

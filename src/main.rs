@@ -26,7 +26,10 @@ fn main() {
         find_closest_food.after(think_of_actions),
         find_closest_creature.after(think_of_actions),
         creatures_eat.after(find_closest_food),
-        creatures_bite.after(find_closest_creature),
+        reset_attack.after(think_of_actions),
+        creatures_bite
+            .after(reset_attack)
+            .after(find_closest_creature),
         eat_drained.after(creatures_bite),
         creatures_split.after(creatures_eat).after(eat_drained),
     );
@@ -52,7 +55,7 @@ fn main() {
         })
         .insert_resource(CreatureCount {
             min_count: 50,
-            min_family_count: 5,
+            min_family_count: 10,
             ..default()
         })
         .insert_resource(Game::default())
