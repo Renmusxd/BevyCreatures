@@ -12,6 +12,7 @@ use bevy::window::PrimaryWindow;
 use bevy_prototype_debug_lines::*;
 use num::traits::Pow;
 use std::cmp::Ordering::Equal;
+use std::time::Duration;
 
 fn main() {
     let perception_and_actions = (
@@ -74,6 +75,7 @@ fn main() {
         .add_system(draw_vision_lines)
         .add_system(choose_creature)
         .add_system(move_camera)
+        .add_system(adjust_framerate.run_if(should_adjust))
         .run();
 }
 
@@ -193,6 +195,38 @@ fn choose_creature(
                 .min_by(|(d2a, _), (d2b, _)| d2a.partial_cmp(d2b).unwrap_or(Equal))
                 .map(|(_, e)| e);
         }
+    }
+}
+
+fn should_adjust(count: Res<CreatureCount>, fixed_time: Res<FixedTime>) -> bool {
+    let low_framerate: Duration = Duration::from_secs_f32(1. / 60.);
+    let high_framerate: Duration = Duration::from_secs_f32(1. / 360.);
+
+    let count_low = count.count < 2 * count.min_count;
+    let count_high = count.count > 3 * count.min_count;
+    let frames_are_fast = fixed_time.period < low_framerate;
+    let frames_are_slow = fixed_time.period > high_framerate;
+    if count_low && frames_are_slow {
+        true
+    } else if count_high && frames_are_fast {
+        true
+    } else {
+        false
+    }
+}
+
+fn adjust_framerate(count: Res<CreatureCount>, mut fixed_time: ResMut<FixedTime>) {
+    let low_framerate: Duration = Duration::from_secs_f32(1. / 60.);
+    let high_framerate: Duration = Duration::from_secs_f32(1. / 360.);
+
+    let count_low = count.count < 2 * count.min_count;
+    let count_high = count.count > 3 * count.min_count;
+    let frames_are_fast = fixed_time.period < low_framerate;
+    let frames_are_slow = fixed_time.period > high_framerate;
+    if count_low && frames_are_slow {
+        fixed_time.period = high_framerate;
+    } else if count_high && frames_are_fast {
+        fixed_time.period = low_framerate;
     }
 }
 

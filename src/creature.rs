@@ -3,12 +3,12 @@ use crate::utils::Grid;
 use crate::world::{FoodCount, FoodEnergy, MaxFood, ViewColor};
 use bevy::math::{vec2, vec3, Vec3Swizzles};
 use bevy::prelude::*;
+use bevy::utils::hashbrown::HashMap;
 use num::pow::Pow;
 use num::Float;
 use rand::prelude::*;
 use rand_distr::Normal;
 use std::cmp::Ordering::Equal;
-use bevy::utils::hashbrown::HashMap;
 
 #[derive(Bundle)]
 pub struct Creature {
@@ -63,7 +63,11 @@ impl Creature {
                 },
                 ..default()
             },
-            dets: CreatureDetails { energy, age: 0, family },
+            dets: CreatureDetails {
+                energy,
+                age: 0,
+                family,
+            },
             target_food: Default::default(),
             target_creature: Default::default(),
         }
@@ -193,21 +197,22 @@ impl Actions {
 
 #[derive(Resource)]
 pub struct CreaturePreferences {
-    pub(crate) max_view_dist: f32,
-    pub(crate) vision_range: f32,    // angle left or right of center
-    pub(crate) vision_slices: usize, // number of chunks for vision
-    pub(crate) energy_scale: f32,
-    pub(crate) max_age: usize,
-    pub(crate) walk_speed: f32,
-    pub(crate) turn_speed: f32,
-    pub(crate) num_memories: usize,
-    pub(crate) mouth_radius: f32,
-    pub(crate) food_ratio: f32,
-    pub(crate) max_food_per_feed: usize,
-    pub(crate) energy_drain_per_bite: f32,
-    pub(crate) split_std: f32,
-    pub(crate) mutation_rate: f32,
-    pub(crate) energy_costs: EnergyCosts,
+    pub max_view_dist: f32,
+    pub vision_range: f32,    // angle left or right of center
+    pub vision_slices: usize, // number of chunks for vision
+    pub energy_scale: f32,
+    pub max_age: usize,
+    pub walk_speed: f32,
+    pub turn_speed: f32,
+    pub num_memories: usize,
+    pub mouth_radius: f32,
+    pub food_ratio: f32,
+    pub max_food_per_feed: usize,
+    pub energy_drain_per_bite: f32,
+    pub split_std: f32,
+    pub mutation_rate: f32,
+    pub energy_costs: EnergyCosts,
+    pub color_mutation_rate: f32,
 }
 impl Default for CreaturePreferences {
     fn default() -> Self {
@@ -226,6 +231,7 @@ impl Default for CreaturePreferences {
             energy_drain_per_bite: 1000.0,
             split_std: 20.0,
             mutation_rate: 0.1,
+            color_mutation_rate: 0.02,
             energy_costs: Default::default(),
         }
     }
@@ -500,14 +506,14 @@ pub fn creatures_split(
             let theta = 2. * rng.gen::<f32>() * std::f32::consts::PI;
             let r = transform.translation.xy() + vec2(x, y);
 
-            let color_normal = Normal::new(0.0, 0.01).unwrap();
+            let color_normal = Normal::new(0.0, creature_prefs.color_mutation_rate).unwrap();
             let new_r = sprite.color.r() + color_normal.sample(&mut rng);
             let new_g = sprite.color.g() + color_normal.sample(&mut rng);
             let new_b = sprite.color.b() + color_normal.sample(&mut rng);
             let max_val = new_r.max(new_g).max(new_b);
-            let new_r = new_r/max_val;
-            let new_g = new_g/max_val;
-            let new_b = new_b/max_val;
+            let new_r = new_r / max_val;
+            let new_g = new_g / max_val;
+            let new_b = new_b / max_val;
 
             let new_brain = brain.clone_mutate(creature_prefs.mutation_rate);
             let new_creature = Creature::new_with_brain(
@@ -603,9 +609,9 @@ pub fn repopulate_creatures(
         let g = rng.gen::<f32>();
         let b = rng.gen::<f32>();
         let max_val = r.max(g).max(b);
-        let r = r/max_val;
-        let g = g/max_val;
-        let b = b/max_val;
+        let r = r / max_val;
+        let g = g / max_val;
+        let b = b / max_val;
 
         let color = Color::rgb(r, g, b);
         commands.spawn(Creature::new(
@@ -660,7 +666,10 @@ pub fn creature_despawn(
             let family = cd.family;
             commands.entity(entity).despawn();
             count.count -= 1;
-            let family_count = count.family_count.get_mut(&family).expect("Family not present.");
+            let family_count = count
+                .family_count
+                .get_mut(&family)
+                .expect("Family not present.");
             *family_count -= 1;
             if *family_count == 0 {
                 count.family_count.remove(&family);
