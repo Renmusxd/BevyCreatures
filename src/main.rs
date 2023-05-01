@@ -3,30 +3,18 @@ mod creature;
 mod utils;
 mod world;
 
-
 use crate::creature::*;
+use crate::utils::*;
 use crate::world::*;
-use bevy::math::{vec3};
+use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
+use bevy::math::vec3;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_prototype_debug_lines::*;
 use num::traits::Pow;
 use std::cmp::Ordering::Equal;
 
-const TIME_STEP: f32 = 1.0 / 60.0;
-const BACKGROUND_COLOR: Color = Color::rgb(0.0, 0.0, 0.0);
-
 fn main() {
-    let handle_food = (
-        decay_food,
-        populate_food.after(decay_food),
-        food_despawn.after(decay_food),
-    );
-    let handle_creature_decay = (
-        decay_creatures,
-        creature_despawn.after(decay_creatures),
-        repopulate_creatures.after(decay_creatures),
-    );
     let perception_and_actions = (
         populate_grid,
         self_perception,
@@ -42,15 +30,27 @@ fn main() {
         eat_drained.after(creatures_bite),
         creatures_split.after(creatures_eat).after(eat_drained),
     );
+    let handle_food = (
+        decay_food,
+        populate_food.after(decay_food),
+        food_despawn.after(decay_food),
+    );
+    let handle_creature_decay = (
+        decay_creatures,
+        creature_despawn.after(decay_creatures),
+        repopulate_creatures.after(decay_creatures),
+    );
 
     App::new()
         // Add window etc..
         .add_plugins(DefaultPlugins)
         // Debug lines
         .add_plugin(DebugLinesPlugin::default())
+        .add_plugin(LogDiagnosticsPlugin::default())
+        .add_plugin(FrameTimeDiagnosticsPlugin::default())
         // Clear screen using ClearColor
-        .insert_resource(ClearColor(BACKGROUND_COLOR))
-        .insert_resource(FixedTime::new_from_secs(TIME_STEP))
+        .insert_resource(ClearColor(Color::rgb(0.0, 0.0, 0.0)))
+        .insert_resource(FixedTime::new_from_secs(1. / 60.))
         .insert_resource(MaxFood {
             total_energy: 1_000_000,
             min_food_grow: 600,
@@ -59,13 +59,12 @@ fn main() {
         })
         .insert_resource(CreatureCount {
             count: 0,
-            min_count: 50,
+            min_count: 20,
         })
         .insert_resource(Game::default())
         .insert_resource(CreaturePreferences::default())
         .insert_resource(FoodCount::default())
         .insert_resource(CollisionGrid::new(1000.0, 100))
-        .insert_resource(FixedTime::new_from_secs(TIME_STEP))
         .add_startup_system(setup)
         .add_systems(perception_and_actions.in_schedule(CoreSchedule::FixedUpdate))
         .add_systems(
