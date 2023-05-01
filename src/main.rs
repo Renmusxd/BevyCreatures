@@ -16,21 +16,26 @@ use std::time::Duration;
 
 fn main() {
     let perception_and_actions = (
+        // Get ready to calculate neighborhood interactions.
         populate_grid,
+        // Think about what to do
         self_perception,
         vision_perception.after(populate_grid),
         think_of_actions
             .after(vision_perception)
             .after(self_perception),
+        // This block technically doesn't commute, but no big deal if position changes a bit.
         move_from_actions.after(think_of_actions),
         find_closest_food.after(think_of_actions),
         find_closest_creature.after(think_of_actions),
+        // Use found targets to eat/bite
         creatures_eat.after(find_closest_food),
         reset_attack.after(think_of_actions),
         creatures_bite
             .after(reset_attack)
             .after(find_closest_creature),
         eat_drained.after(creatures_bite),
+        // Reproduce
         creatures_split.after(creatures_eat).after(eat_drained),
     );
     let handle_food = (populate_food.run_if(every_food_frame), food_despawn);
