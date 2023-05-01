@@ -2,7 +2,6 @@ use bevy::prelude::*;
 use rand::prelude::*;
 use rand_distr::{Distribution, Normal};
 
-
 #[derive(Default, Resource)]
 pub struct FoodCount {
     pub(crate) total_energy: usize,
@@ -65,14 +64,6 @@ pub fn populate_food(
         commands.spawn(food);
         foodcount.total_energy += energy;
     }
-}
-
-pub fn decay_food(_query: Query<&mut FoodEnergy>, _foodcount: ResMut<FoodCount>) {
-    // query.iter_mut().for_each(|mut fe| {
-    //     let dec = min(fe.energy, 1);
-    //     fe.energy -= dec;
-    //     foodcount.total_energy -= dec;
-    // })
 }
 
 pub fn food_despawn(query: Query<(Entity, &FoodEnergy)>, mut commands: Commands) {

@@ -6,6 +6,7 @@ mod world;
 use crate::creature::*;
 use crate::utils::*;
 use crate::world::*;
+use bevy::core::FrameCount;
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::math::vec3;
 use bevy::prelude::*;
@@ -30,11 +31,7 @@ fn main() {
         eat_drained.after(creatures_bite),
         creatures_split.after(creatures_eat).after(eat_drained),
     );
-    let handle_food = (
-        decay_food,
-        populate_food.after(decay_food),
-        food_despawn.after(decay_food),
-    );
+    let handle_food = (populate_food.run_if(every_food_frame), food_despawn);
     let handle_creature_decay = (
         decay_creatures,
         creature_despawn.after(decay_creatures),
@@ -46,8 +43,6 @@ fn main() {
         .add_plugins(DefaultPlugins)
         // Debug lines
         .add_plugin(DebugLinesPlugin::default())
-        .add_plugin(LogDiagnosticsPlugin::default())
-        .add_plugin(FrameTimeDiagnosticsPlugin::default())
         // Clear screen using ClearColor
         .insert_resource(ClearColor(Color::rgb(0.0, 0.0, 0.0)))
         .insert_resource(FixedTime::new_from_secs(1. / 360.))
@@ -89,6 +84,10 @@ struct MainCamera;
 
 fn setup(mut commands: Commands) {
     commands.spawn((Camera2dBundle::default(), MainCamera));
+}
+
+fn every_food_frame(framecount: Res<FrameCount>) -> bool {
+    framecount.0 < 1000 || framecount.0 % 10 == 0
 }
 
 fn draw_vision_lines(
