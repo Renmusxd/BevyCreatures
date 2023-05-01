@@ -59,9 +59,6 @@ impl NeuralBrain {
         }
     }
 
-    fn feed_slice(&self, inputs: &[f32], outputs: &mut [f32]) {
-        self.feed(inputs.to_vec(), outputs)
-    }
     pub(crate) fn feed_iter<It>(&self, inputs: It, outputs: &mut [f32])
     where
         It: Iterator<Item = f32>,

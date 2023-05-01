@@ -4,10 +4,8 @@ mod utils;
 mod world;
 
 use crate::creature::*;
-use crate::utils::*;
 use crate::world::*;
 use bevy::core::FrameCount;
-use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::math::vec3;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -48,13 +46,13 @@ fn main() {
         .insert_resource(FixedTime::new_from_secs(1. / 360.))
         .insert_resource(MaxFood {
             total_energy: 1_000_000,
-            min_food_grow: 500,
-            max_food_grow: 5000,
+            food_grow: 2000,
             food_std: 1000.0,
         })
         .insert_resource(CreatureCount {
-            count: 0,
-            min_count: 100,
+            min_count: 50,
+            min_family_count: 5,
+            ..default()
         })
         .insert_resource(Game::default())
         .insert_resource(CreaturePreferences::default())
@@ -87,7 +85,7 @@ fn setup(mut commands: Commands) {
 }
 
 fn every_food_frame(framecount: Res<FrameCount>) -> bool {
-    framecount.0 < 1000 || framecount.0 % 10 == 0
+    framecount.0 < 1000 || framecount.0 % 8 == 0
 }
 
 fn draw_vision_lines(

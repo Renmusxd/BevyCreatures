@@ -9,8 +9,7 @@ pub struct FoodCount {
 #[derive(Resource)]
 pub struct MaxFood {
     pub(crate) total_energy: usize,
-    pub(crate) min_food_grow: usize,
-    pub(crate) max_food_grow: usize,
+    pub(crate) food_grow: usize,
     pub(crate) food_std: f32,
 }
 
@@ -38,16 +37,14 @@ pub fn populate_food(
     maxfood: Res<MaxFood>,
     asset_server: Res<AssetServer>,
 ) {
-    if foodcount.total_energy < maxfood.total_energy - maxfood.min_food_grow {
+    if foodcount.total_energy <= maxfood.total_energy - maxfood.food_grow {
         let mut rng = thread_rng();
-        let energy = rng.gen_range(maxfood.min_food_grow..maxfood.max_food_grow);
-
         let normal = Normal::new(0.0, maxfood.food_std).unwrap();
         let x = normal.sample(&mut rng);
         let y = normal.sample(&mut rng);
 
         let food = Food {
-            energy: FoodEnergy { energy },
+            energy: FoodEnergy { energy: maxfood.food_grow },
             view_color: ViewColor {
                 color: Color::GREEN,
             },
@@ -62,7 +59,7 @@ pub fn populate_food(
             },
         };
         commands.spawn(food);
-        foodcount.total_energy += energy;
+        foodcount.total_energy += maxfood.food_grow;
     }
 }
 

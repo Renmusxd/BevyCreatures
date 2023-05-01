@@ -7,8 +7,8 @@ use num::pow::Pow;
 use num::Float;
 use rand::prelude::*;
 use rand_distr::Normal;
-use std::cmp::min;
 use std::cmp::Ordering::Equal;
+use bevy::utils::hashbrown::HashMap;
 
 #[derive(Bundle)]
 pub struct Creature {
@@ -25,6 +25,7 @@ pub struct Creature {
 
 impl Creature {
     pub(crate) fn new(
+        family: usize,
         inputs: usize,
         outputs: usize,
         energy: f32,
@@ -34,10 +35,11 @@ impl Creature {
         texture: Handle<Image>,
     ) -> Self {
         let brain = NeuralBrain::new_random(inputs, outputs, &[8]);
-        Creature::new_with_brain(brain, energy, color, r, theta, texture)
+        Creature::new_with_brain(family, brain, energy, color, r, theta, texture)
     }
 
     fn new_with_brain(
+        family: usize,
         brain: NeuralBrain,
         energy: f32,
         color: Color,
@@ -61,7 +63,7 @@ impl Creature {
                 },
                 ..default()
             },
-            dets: CreatureDetails { energy, age: 0 },
+            dets: CreatureDetails { energy, age: 0, family },
             target_food: Default::default(),
             target_creature: Default::default(),
         }
@@ -72,6 +74,7 @@ impl Creature {
 pub struct CreatureDetails {
     pub energy: f32,
     pub age: usize,
+    pub family: usize,
 }
 
 #[derive(Component, Default)]
@@ -213,7 +216,7 @@ impl Default for CreaturePreferences {
             vision_range: std::f32::consts::PI / 8.,
             vision_slices: 5,
             energy_scale: 50_000.,
-            max_age: 1_000_000,
+            max_age: 100_000,
             walk_speed: 0.3,
             turn_speed: 0.01,
             num_memories: 1,
@@ -497,17 +500,28 @@ pub fn creatures_split(
             let theta = 2. * rng.gen::<f32>() * std::f32::consts::PI;
             let r = transform.translation.xy() + vec2(x, y);
 
+            let color_normal = Normal::new(0.0, 0.01).unwrap();
+            let new_r = sprite.color.r() + color_normal.sample(&mut rng);
+            let new_g = sprite.color.g() + color_normal.sample(&mut rng);
+            let new_b = sprite.color.b() + color_normal.sample(&mut rng);
+            let max_val = new_r.max(new_g).max(new_b);
+            let new_r = new_r/max_val;
+            let new_g = new_g/max_val;
+            let new_b = new_b/max_val;
+
             let new_brain = brain.clone_mutate(creature_prefs.mutation_rate);
             let new_creature = Creature::new_with_brain(
+                dets.family,
                 new_brain,
                 half_energy,
-                sprite.color,
+                Color::rgb(new_r, new_g, new_b),
                 r,
                 theta,
                 asset_server.load("imgs/animal.png"),
             );
             commands.spawn(new_creature);
             count.count += 1;
+            *count.family_count.entry(dets.family).or_insert(0) += 1;
         }
     })
 }
@@ -545,7 +559,7 @@ pub fn creatures_eat(
     actors.for_each_mut(|(_acts, _t, mut dets, target)| {
         let food = target.target.and_then(|e| food.get_mut(e).ok());
         if let Some(mut food) = food {
-            let to_eat = min(food.energy, creature_prefs.max_food_per_feed);
+            let to_eat = food.energy.min(creature_prefs.max_food_per_feed);
             food.energy -= to_eat;
             foodcount.total_energy -= to_eat;
             dets.energy += creature_prefs.food_ratio * (to_eat as f32);
@@ -553,10 +567,13 @@ pub fn creatures_eat(
     })
 }
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct CreatureCount {
     pub count: usize,
     pub min_count: usize,
+    pub family_num: usize,
+    pub family_count: HashMap<usize, usize>,
+    pub min_family_count: usize,
 }
 
 pub fn repopulate_creatures(
@@ -566,7 +583,10 @@ pub fn repopulate_creatures(
     mut count: ResMut<CreatureCount>,
     asset_server: Res<AssetServer>,
 ) {
-    if count.count < count.min_count {
+    let too_few_creatures = count.count < count.min_count;
+    let too_few_families = count.family_count.len() < count.min_family_count;
+
+    if too_few_creatures || too_few_families {
         let mut rng = thread_rng();
         let normal = Normal::new(0.0, maxfood.food_std).unwrap();
         let x = normal.sample(&mut rng);
@@ -578,8 +598,18 @@ pub fn repopulate_creatures(
         let num_self_inputs =
             SelfPerception::num_non_memory_perceptions() + creature_preferences.num_memories;
         let num_actions = Actions::num_non_memory_actions() + creature_preferences.num_memories;
-        let color = Color::rgb(1.0, 0.0, 0.0);
+
+        let r = rng.gen::<f32>();
+        let g = rng.gen::<f32>();
+        let b = rng.gen::<f32>();
+        let max_val = r.max(g).max(b);
+        let r = r/max_val;
+        let g = g/max_val;
+        let b = b/max_val;
+
+        let color = Color::rgb(r, g, b);
         commands.spawn(Creature::new(
+            count.family_num,
             num_vision_inputs + num_self_inputs,
             num_actions,
             20_000.,
@@ -588,7 +618,10 @@ pub fn repopulate_creatures(
             theta,
             asset_server.load("imgs/animal.png"),
         ));
+        let fam_num = count.family_num;
+        *count.family_count.entry(fam_num).or_insert(0) += 1;
         count.count += 1;
+        count.family_num += 1;
     }
 }
 
@@ -624,8 +657,14 @@ pub fn creature_despawn(
 ) {
     for (entity, cd) in query.iter() {
         if cd.energy <= 0. || cd.age >= creature_preferences.max_age {
+            let family = cd.family;
             commands.entity(entity).despawn();
             count.count -= 1;
+            let family_count = count.family_count.get_mut(&family).expect("Family not present.");
+            *family_count -= 1;
+            if *family_count == 0 {
+                count.family_count.remove(&family);
+            }
         }
     }
 }

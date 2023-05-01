@@ -1,4 +1,3 @@
-use bevy::prelude::{info, Res, ResMut, Time};
 use num::pow::Pow;
 use std::cmp::min;
 
@@ -24,9 +23,7 @@ where
 
 pub struct Grid<T> {
     minx: f32,
-    maxx: f32,
     miny: f32,
-    maxy: f32,
     dx: f32,
     dy: f32,
     nx: usize,
@@ -41,9 +38,7 @@ impl<T> Grid<T> {
         let dy = (maxy - miny) / (ny as f32);
         Self {
             minx,
-            maxx,
             miny,
-            maxy,
             dx,
             dy,
             nx,
