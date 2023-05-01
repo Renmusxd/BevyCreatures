@@ -95,7 +95,7 @@ fn setup(mut commands: Commands) {
 }
 
 fn every_food_frame(framecount: Res<FrameCount>) -> bool {
-    framecount.0 < 1000 || framecount.0 % 8 == 0
+    framecount.0 < 1000 || framecount.0 % 16 == 0
 }
 
 fn draw_vision_lines(
