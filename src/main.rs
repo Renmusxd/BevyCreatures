@@ -50,21 +50,21 @@ fn main() {
         .add_plugin(FrameTimeDiagnosticsPlugin::default())
         // Clear screen using ClearColor
         .insert_resource(ClearColor(Color::rgb(0.0, 0.0, 0.0)))
-        .insert_resource(FixedTime::new_from_secs(1. / 60.))
+        .insert_resource(FixedTime::new_from_secs(1. / 360.))
         .insert_resource(MaxFood {
             total_energy: 1_000_000,
-            min_food_grow: 600,
-            max_food_grow: 6000,
-            food_std: 600.0,
+            min_food_grow: 500,
+            max_food_grow: 5000,
+            food_std: 1000.0,
         })
         .insert_resource(CreatureCount {
             count: 0,
-            min_count: 20,
+            min_count: 100,
         })
         .insert_resource(Game::default())
         .insert_resource(CreaturePreferences::default())
         .insert_resource(FoodCount::default())
-        .insert_resource(CollisionGrid::new(1000.0, 100))
+        .insert_resource(CollisionGrid::new(2000.0, 100))
         .add_startup_system(setup)
         .add_systems(perception_and_actions.in_schedule(CoreSchedule::FixedUpdate))
         .add_systems(
@@ -113,7 +113,7 @@ fn draw_vision_lines(
         (0..perc.n())
             .filter(|i| perc.d()[*i].is_finite())
             .for_each(|i| {
-                let distance = (1. - perc.d()[i]) * creature_prefs.vision_range;
+                let distance = (1. - perc.d()[i]) * creature_prefs.max_view_dist;
                 let color = Color::rgb(perc.r()[i], perc.g()[i], perc.b()[i]);
                 let v = vec3(distance, 0.0, 0.0);
                 let r = Quat::from_rotation_z(

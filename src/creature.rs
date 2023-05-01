@@ -50,9 +50,7 @@ impl Creature {
             vperception: Default::default(),
             sperception: Default::default(),
             actions: Default::default(),
-            view_color: ViewColor {
-                color,
-            },
+            view_color: ViewColor { color },
             sprite: SpriteBundle {
                 texture,
                 sprite: Sprite { color, ..default() },
@@ -96,13 +94,24 @@ impl VisionPerception {
     fn init(&mut self, n: usize) {
         self.clear();
         self.n = n;
+        self.dat.resize(Self::num_channels_per_angle() * n, 0.0);
         self.dat
-            .resize((Self::num_channels_per_angle() - 1) * n, 0.0);
-        self.dat
-            .resize(Self::num_channels_per_angle() * n, f32::infinity());
+            .resize((1 + Self::num_channels_per_angle()) * n, f32::infinity());
     }
     pub fn n(&self) -> usize {
         self.n
+    }
+
+    pub(crate) fn scale_by_d(&mut self) {
+        for i in 0..self.n {
+            self.dat[i] *= self.dat[i + 3 * self.n];
+            self.dat[i + self.n] *= self.dat[i + 3 * self.n];
+            self.dat[i + 2 * self.n] *= self.dat[i + 3 * self.n];
+        }
+    }
+
+    pub(crate) fn color_dat(&self) -> &[f32] {
+        &self.dat[..3 * self.n]
     }
 
     pub(crate) fn r(&self) -> &[f32] {
@@ -135,7 +144,7 @@ impl VisionPerception {
     }
 
     pub fn num_channels_per_angle() -> usize {
-        4
+        3
     }
 }
 
@@ -321,8 +330,9 @@ pub fn vision_perception(
                 });
             // Now go through and flip the distance vectors to be 0-1
             perc.d_mut().iter_mut().for_each(|x| {
-                *x = 1. - (*x / creature_prefs.vision_range);
+                *x = 1. - (*x / creature_prefs.max_view_dist);
             });
+            perc.scale_by_d();
         });
 }
 
@@ -354,7 +364,7 @@ pub fn think_of_actions(
     thinkers
         .par_iter_mut()
         .for_each_mut(|(vperc, sperc, brain, mut acts)| {
-            let vision_inputs = &vperc.dat;
+            let vision_inputs = vperc.color_dat();
             let (self_inputs, memories) = sperc.get_dat();
             let iter = vision_inputs
                 .iter()
