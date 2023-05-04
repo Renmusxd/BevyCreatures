@@ -66,7 +66,7 @@ fn main() {
         .insert_resource(Game::default())
         .insert_resource(CreaturePreferences::default())
         .insert_resource(FoodCount::default())
-        .insert_resource(CollisionGrid::new(2000.0, 100))
+        .insert_resource(CollisionGrid::new(2000.0, 200))
         .add_startup_system(setup)
         .add_systems(perception_and_actions.in_schedule(CoreSchedule::FixedUpdate))
         .add_systems(

@@ -44,7 +44,9 @@ pub fn populate_food(
         let y = normal.sample(&mut rng);
 
         let food = Food {
-            energy: FoodEnergy { energy: maxfood.food_grow },
+            energy: FoodEnergy {
+                energy: maxfood.food_grow,
+            },
             view_color: ViewColor {
                 color: Color::GREEN,
             },
@@ -63,7 +65,10 @@ pub fn populate_food(
     }
 }
 
-pub fn food_despawn(query: Query<(Entity, &FoodEnergy)>, mut commands: Commands) {
+pub fn food_despawn(
+    query: Query<(Entity, &FoodEnergy), Changed<FoodEnergy>>,
+    mut commands: Commands,
+) {
     for (entity, fe) in query.iter() {
         if fe.energy == 0 {
             commands.entity(entity).despawn();

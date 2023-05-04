@@ -1,26 +1,6 @@
 use num::pow::Pow;
 use std::cmp::min;
 
-pub enum IterEither<TA, TB> {
-    A(TA),
-    B(TB),
-}
-
-impl<T, TA, TB> Iterator for IterEither<TA, TB>
-where
-    TA: Iterator<Item = T>,
-    TB: Iterator<Item = T>,
-{
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            IterEither::A(a) => a.next(),
-            IterEither::B(b) => b.next(),
-        }
-    }
-}
-
 pub struct Grid<T> {
     minx: f32,
     miny: f32,
@@ -66,6 +46,17 @@ impl<T> Grid<T> {
         }
     }
 
+    pub(crate) fn within_bounds(&self, x: f32, y: f32) -> Option<(usize, usize)> {
+        let ix = (x - self.minx) / self.dx;
+        let iy = (y - self.miny) / self.dy;
+        let outside_bounds = ix < 0. || ix >= (self.nx as f32) || iy < 0. || iy >= (self.ny as f32);
+        if outside_bounds {
+            None
+        } else {
+            Some((ix as usize, iy as usize))
+        }
+    }
+
     pub(crate) fn within_dist_of(
         &self,
         x: f32,
@@ -73,38 +64,40 @@ impl<T> Grid<T> {
         d: f32,
     ) -> impl Iterator<Item = &(f32, f32, T)> {
         let d2 = d.pow(2);
-        let ix = (x - self.minx) / self.dx;
-        let iy = (y - self.miny) / self.dy;
-        let dnx = (d / self.dx).floor() as usize;
-        let dny = (d / self.dy).floor() as usize;
-        let outside_bounds = ix < 0. || ix >= (self.nx as f32) || iy < 0. || iy >= (self.ny as f32);
+        let dnx = 1 + (d / self.dx).floor() as usize;
+        let dny = 1 + (d / self.dy).floor() as usize;
 
-        let within_bounds = if !outside_bounds {
-            let ix = ix as usize;
-            let iy = iy as usize;
-            debug_assert!(ix < self.nx);
-            debug_assert!(iy < self.ny);
-            let lowx = ix - min(ix, dnx + 1);
-            let lowy = iy - min(iy, dny + 1);
+        let (xrange, yrange) = if let Some((ix, iy)) = self.within_bounds(x, y) {
+            let lowx = ix - min(ix, dnx);
+            let lowy = iy - min(iy, dny);
             let highx = min(ix + dnx + 1, self.nx);
             let highy = min(iy + dny + 1, self.ny);
-            let within_bounds = (lowx..highx)
-                .flat_map(move |dix| (lowy..highy).map(move |diy| (dix, diy)))
-                .flat_map(move |(dix, diy)| {
-                    debug_assert!(dix < self.nx, "dix={} >= {}", dix, self.nx);
-                    debug_assert!(diy < self.ny, "diy={} >= {}", diy, self.ny);
-
-                    self.dat[(diy * self.nx) + dix].iter()
-                });
-            IterEither::A(within_bounds)
+            ((lowx..highx), (lowy..highy))
         } else {
-            let all_possible = self.dat.iter().flat_map(|v| v.iter());
-            IterEither::B(all_possible)
+            let xrange = if x < self.minx {
+                0..min(dnx + 1, self.nx)
+            } else {
+                debug_assert!(x > self.minx + (self.nx as f32) * self.dx);
+                self.nx - min(dnx, self.nx)..self.nx
+            };
+            let yrange = if y < self.miny {
+                (0..min(dny + 1, self.ny))
+            } else {
+                debug_assert!(x > self.miny + (self.ny as f32) * self.dy);
+                (self.ny - min(dny, self.ny)..self.ny)
+            };
+            (xrange, yrange)
         };
-        let outside_bounds = self.outside.iter();
 
-        within_bounds
-            .chain(outside_bounds)
+        xrange
+            .flat_map(move |dix| yrange.clone().map(move |diy| (dix, diy)))
+            .flat_map(move |(dix, diy)| {
+                debug_assert!(dix < self.nx, "dix={} >= {}", dix, self.nx);
+                debug_assert!(diy < self.ny, "diy={} >= {}", diy, self.ny);
+
+                self.dat[(diy * self.nx) + dix].iter()
+            })
+            .chain(self.outside.iter())
             .filter(move |(tx, ty, _)| (tx - x).pow(2) + (ty - y).pow(2) <= d2)
     }
 }
@@ -117,6 +110,9 @@ mod tests {
         let mut grid = Grid::new(0.0, 1.0, 0.0, 1.0, 1, 1);
         grid.insert(0.5, 0.1, ());
         grid.insert(0.5, 0.99, ());
+        debug_assert_eq!(grid.within_bounds(0.5, 0.5), Some((0, 0)));
+        debug_assert_eq!(grid.within_bounds(-0.5, 0.5), None);
+        debug_assert_eq!(grid.within_bounds(0.5, -0.5), None);
 
         let a = grid.within_dist_of(0.5, 0.5, 0.55).collect::<Vec<_>>();
         assert_eq!(a.len(), 2, "a={:?}", a);

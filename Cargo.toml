@@ -7,8 +7,8 @@ edition = "2021"
 resolver = "2"
 
 # Enable only a small amount of optimization in debug mode
-[profile.dev]
-opt-level = 0
+#[profile.dev]
+#opt-level = 1
 
 # Enable high optimizations for dependencies (incl. Bevy), but not for our code:
 [profile.dev.package."*"]
